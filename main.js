@@ -120,9 +120,10 @@ async function init() {
 
 async function loadPersistentImages() {
     try {
-        const response = await fetch('/api/images');
+        // Fetch from the static JSON file we just generated
+        const response = await fetch('./images.json'); 
         if (!response.ok) {
-            throw new Error('No se pudieron cargar las imágenes del servidor.');
+            throw new Error('No se pudo cargar el archivo images.json.');
         }
         const savedImages = await response.json();
 
