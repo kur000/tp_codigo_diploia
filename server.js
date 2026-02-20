@@ -1,94 +1,67 @@
 // 1. Importar las librerías
 const express = require('express');
 const multer = require('multer');
-const cloudinary = require('cloudinary').v2;
-const cors = require('cors'); // Para permitir peticiones desde tu web
+const cors = require('cors');
 const path = require('path');
-const mongoose = require('mongoose');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 
-// Serve static site and add a health check
+// 2. Crear la carpeta "images" si no existe
+const imagesDir = path.join(__dirname, 'images');
+if (!fs.existsSync(imagesDir)) {
+    fs.mkdirSync(imagesDir);
+}
+
+// 3. Servir archivos estáticos
 app.use(express.static(path.join(__dirname)));
+app.use('/images', express.static(imagesDir)); // Permite que el frontend lea los archivos de la carpeta images
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.get('/health', (req, res) => res.json({ ok: true }));
 
-// Cloudinary config (prefer env vars; falls back to placeholders)
-cloudinary.config({
-  cloud_name: 'ddtecuoe9',
-  api_key: '585716652291527',
-  api_secret: 'C8fnGrOkI09nvetm5hKwfjCCHpo',
+// 4. Configurar Multer para guardar en la carpeta local "images"
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, 'images/')
+    },
+    filename: function (req, file, cb) {
+        // Genera un nombre único para evitar que las imágenes se sobreescriban
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, uniqueSuffix + '-' + file.originalname);
+    }
+});
+const upload = multer({ storage: storage });
+
+// 5. Rutas de la API
+
+// Ruta para subir la imagen localmente
+app.post('/api/upload', upload.single('image'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No se subió ningún archivo.' });
+    
+    // Devolvemos la URL local
+    const imageUrl = `/images/${req.file.filename}`;
+    res.status(200).json({ imageUrl: imageUrl, id: req.file.filename });
 });
 
-// MongoDB Atlas connection
-const MONGO_URI = process.env.MONGODB_URI || 'mongodb+srv://kuro_db:kuroDB@clusterdiplo.feaioyc.mongodb.net/?retryWrites=true&w=majority&appName=ClusterDiplo';
-mongoose.connect(MONGO_URI, {
-  dbName: 'maqueta3js',          // ensure a concrete DB name
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
-mongoose.connection.on('connected', () => console.log('MongoDB Atlas connected'));
-mongoose.connection.on('error', (err) => console.error('MongoDB error:', err));
-
-// Image model
-const Image = mongoose.model('Image', new mongoose.Schema({
-  url: { type: String, required: true },
-  public_id: String,
-  originalName: String,
-  format: String,
-  width: Number,
-  height: Number,
-  createdAt: { type: Date, default: Date.now },
-}));
-
-// Multer in-memory
-const storage = multer.memoryStorage();
-const upload = multer({ storage });
-
-// Helper: await Cloudinary upload_stream
-function uploadBufferToCloudinary(buffer) {
-  return new Promise((resolve, reject) => {
-    cloudinary.uploader.upload_stream({ resource_type: 'image' }, (error, result) => {
-      if (error) return reject(error);
-      resolve(result);
-    }).end(buffer);
-  });
-}
-
-// Upload route: save to Cloudinary + MongoDB
-app.post('/api/upload', upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No se subió ningún archivo.' });
-
-  try {
-    const result = await uploadBufferToCloudinary(req.file.buffer);
-    const doc = await Image.create({
-      url: result.secure_url,
-      public_id: result.public_id,
-      originalName: req.file.originalname,
-      format: result.format,
-      width: result.width,
-      height: result.height,
+// Ruta para listar las imágenes desde la carpeta local
+app.get('/api/images', (req, res) => {
+    fs.readdir(imagesDir, (err, files) => {
+        if (err) return res.status(500).json({ error: 'Error al leer el directorio de imágenes.' });
+        
+        // Mapeamos los archivos a la estructura que espera tu frontend
+        const images = files.map(file => ({
+            url: `/images/${file}`,
+            id: file
+        }));
+        
+        res.json(images);
     });
-    res.status(200).json({ imageUrl: result.secure_url, id: doc._id });
-  } catch (err) {
-    console.error('Error en Cloudinary o DB:', err);
-    res.status(500).json({ error: 'Error al subir/guardar la imagen.' });
-  }
 });
 
-// Listing route
-app.get('/api/images', async (req, res) => {
-  try {
-    const images = await Image.find().sort({ createdAt: -1 }).lean();
-    res.json(images);
-  } catch (err) {
-    res.status(500).json({ error: 'Error al listar las imágenes.' });
-  }
-});
-
-// 5. Iniciar el servidor
+// 6. Iniciar el servidor
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en el puerto ${PORT}`);
+    console.log(`🚀 Servidor escuchando en http://localhost:${PORT}`);
 });

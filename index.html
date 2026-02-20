@@ -3,12 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Muro Artístico Latente - IA Project</title>
+    <title>Muro Latente - IA Project</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="info">Muro Colaborativo - <i>Diplo IA</i></div> 
+    <div id="instructions-modal">
+        <div class="modal-content">
+            <h2>TP Arte generativo y código con modelos IA</h2>
+            <p><b>Click Izquierdo:</b> Abrir obras en detalle.</p>
+            <p><b>Click Derecho (mantener):</b> Arrastrar para mirar alrededor.</p>
+            <button id="start-btn">Entrar</button>
+        </div>
+    </div>
+    <div id="info">ComfyUI Outputs + Codigo Generativo - <i>Diplo IA</i></div> 
     <div class="ellipse-guide"></div>
+
+    <div id="image-overlay">
+        <span id="close-btn">&times;</span>
+        <img id="overlay-img" src="" alt="Obra en detalle">
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>

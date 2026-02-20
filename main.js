@@ -1,84 +1,81 @@
-// La instrucción 'import * as THREE from './three.module.js';' 
-// se evita aquí ya que se importó desde el CDN en el HTML.
-// Usaremos la variable global THREE.
-const z_spread = 40;
-
 let scene, camera, renderer, clock, container, controls;
-const images = []; // Array para guardar las texturas/mallas de las imágenes flotantes
-let initZ = 0; // Z inicial de la cámara para clamp dinámico
+const images = [];
 
-// --- 1. FUNCIÓN DE INICIALIZACIÓN ---
-// --> CAMBIO 1: La función init ahora es 'async' para poder usar 'await'.
+// NEW: Raycaster setup for clicking objects
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
 async function init() {
-    // 1.1. Configurar la escena
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0f0f0f);
 
-    // 1.2. Configurar la cámara (Perspectiva)
     camera = new THREE.PerspectiveCamera(
-        35, // Campo de visión (Field of View - FOV)
-        window.innerWidth / window.innerHeight, // Aspect Ratio
-        0.1, // Near clipping plane
-        1000 // Far clipping plane
+        35,
+        window.innerWidth / window.innerHeight,
+        0.1,
+        1000
     );
-    camera.position.z = 5;
+    camera.position.set(0, 0, 0);
 
-    // 1.3. Configurar el renderizador
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
     document.body.appendChild(renderer.domElement);
 
-    // 1.4. Luz (Importante para ver objetos)
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
     scene.add(ambientLight);
     const pointLight = new THREE.PointLight(0xffffff, .8);
     pointLight.position.set(5, 5, 5);
     scene.add(pointLight);
 
-    // 1.5. Reloj para animaciones con delta time
     clock = new THREE.Clock();
 
-    // --> CAMBIO 2: Se elimina el bucle que creaba 7 cubos de prueba.
-    // Ya no es necesario porque cargaremos las imágenes reales desde la base de datos.
-
-    // --> CAMBIO 3: Llamamos a la función para cargar las imágenes guardadas.
     await loadPersistentImages();
 
-    // 1.7. Controles de cámara y límites de zoom
     window.addEventListener('resize', onWindowResize, false);
 
-    // Calcular límites de Z entre la vista inicial y la imagen más lejana
-    const furthestZ = getFurthestZ();
-    const minZ = Math.min(initZ, furthestZ);
-    const maxZ = Math.max(initZ, furthestZ);
-
-    // PointerLockControls para POV con clic derecho
     controls = new THREE.PointerLockControls(camera, renderer.domElement);
+    // Limita el movimiento vertical de la cámara
+    // Math.PI / 2 es mirar exactamente al horizonte. Le sumamos/restamos 0.5 radianes para dar un margen de visión.
+    controls.minPolarAngle = Math.PI / 2 - 0.5; // Límite para mirar hacia arriba
+    controls.maxPolarAngle = Math.PI / 2 + 0.5; // Límite para mirar hacia abajo
     renderer.domElement.addEventListener('contextmenu', e => e.preventDefault());
+    
+    // MOUSE DOWN: Only use right-click (button 2) to look around
     renderer.domElement.addEventListener('mousedown', (e) => {
         if (e.button === 2) {
             controls.lock();
             e.preventDefault();
         }
     });
+
     renderer.domElement.addEventListener('mouseup', (e) => {
         if (controls.isLocked) controls.unlock();
     });
+
+    // NEW: Use standard 'click' event strictly for left clicks (button 0)
+    renderer.domElement.addEventListener('click', (e) => {
+        // e.button === 0 is left click
+        if (e.button === 0) {
+            // Convert mouse position to normalized device coordinates (-1 to +1)
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(images);
+
+            if (intersects.length > 0) {
+                // We hit an image!
+                const clickedCube = intersects[0].object;
+                openImageOverlay(clickedCube.userData.url);
+            }
+        }
+    });
+
     renderer.domElement.addEventListener('mouseleave', () => {
         if (controls.isLocked) controls.unlock();
     });
-    
-    // Movimiento en Z con rueda, limitado entre minZ y maxZ
-    window.addEventListener('wheel', (e) => {
-        const sensitivity = 0.02;
-        camera.position.z = THREE.MathUtils.clamp(
-            camera.position.z + e.deltaY * sensitivity,
-            minZ,
-            maxZ
-        );
-    });
 
-    // Listeners para Drag and Drop
+    // Drag and Drop
     window.addEventListener('dragover', (e) => {
         e.preventDefault();
     });
@@ -89,7 +86,7 @@ async function init() {
         if (!file || !file.type || !file.type.startsWith('image/')) return;
 
         const previewUrl = URL.createObjectURL(file);
-        const cube = addImageCubeFromUrl(previewUrl, true); // Añadido flag para posicionar diferente
+        const cube = addImageCubeFromUrl(previewUrl, true);
 
         try {
             const fd = new FormData();
@@ -109,30 +106,18 @@ async function init() {
                 cube.material[5].map = newTexFlipped;
                 cube.material[4].map.needsUpdate = true;
                 cube.material[5].map.needsUpdate = true;
+                
+                // Update the URL reference for the newly uploaded image
+                cube.userData.url = data.imageUrl; 
             }
         } catch (err) {
             console.warn('Upload failed, kept local preview:', err);
         }
     });
 
-    // Wheel Z movement con límites dinámicos
-    window.addEventListener('wheel', (e) => {
-        const sensitivity = 0.02;
-        const furthestZ = getFurthestZ();
-        const minZ = Math.min(initZ, furthestZ);
-        const maxZ = Math.max(initZ, furthestZ);
-        camera.position.z = THREE.MathUtils.clamp(
-            camera.position.z + e.deltaY * sensitivity,
-            minZ,
-            maxZ
-        );
-    });
-
-    // 1.8. Iniciar el ciclo de renderizado (loop)
     animate();
 }
 
-// --> CAMBIO 4: Nueva función para cargar las imágenes desde el servidor.
 async function loadPersistentImages() {
     try {
         const response = await fetch('/api/images');
@@ -141,9 +126,8 @@ async function loadPersistentImages() {
         }
         const savedImages = await response.json();
 
-        // Crea un cubo en la escena por cada imagen guardada
         savedImages.forEach(image => {
-            addImageCubeFromUrl(image.url, false); // El flag 'false' usa la posición aleatoria
+            addImageCubeFromUrl(image.url, false);
         });
 
     } catch (error) {
@@ -151,46 +135,43 @@ async function loadPersistentImages() {
     }
 }
 
-// Function to get random position within ellipse
 function getRandomPosition() {
-    const angle = Math.random() * Math.PI * 2;
-    const radiusX = Math.random() * 4;
-    const radiusY = Math.random() * 2;
-    return {
-        x: Math.cos(angle) * radiusX,
-        y: Math.sin(angle) * radiusY,
-        z: Math.random() * z_spread - z_spread
-    };
+    const minRadius = 10; 
+    const maxRadius = 14; 
+    const radius = minRadius + Math.random() * (maxRadius - minRadius);
+
+    const theta = Math.random() * Math.PI * 2; 
+    const y = (Math.random() - 0.5) * 8; 
+
+    const horizontalRadius = Math.sqrt(radius * radius - y * y);
+    const x = horizontalRadius * Math.cos(theta);
+    const z = horizontalRadius * Math.sin(theta);
+
+    return { x, y, z };
 }
 
-// --- 3. CICLO DE RENDERIZADO (Loop principal) ---
 function animate() {
     requestAnimationFrame(animate);
     const delta = clock.getDelta();
-    images.forEach(img => {
-        img.rotation.y = Math.sin(clock.elapsedTime * .005) * (Math.PI / 4);
-        img.position.x += Math.sin(clock.elapsedTime * 0.1) * 0.001;
+    
+    images.forEach((img, index) => {
+        img.rotation.y = img.userData.baseRotationY + Math.sin(clock.elapsedTime * 0.5 + index) * 0.05;
+        img.position.y += Math.sin(clock.elapsedTime * 0.5 + index) * 0.002;
     });
+
     if (controls && typeof controls.update === 'function') {
         controls.update(delta);
     }
     renderer.render(scene, camera);
 }
 
-// --- 4. MANEJO DE VENTANA ---
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// --- INICIAR EL SITIO ---
 init();
-
-function getFurthestZ() {
-    if (images.length === 0) return initZ;
-    return images.reduce((acc, m) => m.position.z < acc ? m.position.z : acc, images[0].position.z);
-}
 
 function addImageCubeFromUrl(url, placeInFrontOfCamera = false) {
     const loader = new THREE.TextureLoader();
@@ -213,19 +194,61 @@ function addImageCubeFromUrl(url, placeInFrontOfCamera = false) {
     const cube = new THREE.Mesh(geometry, materials);
 
     if (placeInFrontOfCamera) {
-        // Coloca la nueva imagen subida justo delante de la cámara
         const forward = new THREE.Vector3();
         camera.getWorldDirection(forward);
         const distance = 4;
         const pos = camera.position.clone().add(forward.multiplyScalar(distance));
         cube.position.copy(pos);
+        cube.lookAt(camera.position); 
     } else {
-        // Coloca las imágenes cargadas al inicio en posiciones aleatorias
         const position = getRandomPosition();
         cube.position.set(position.x, position.y, position.z);
+        cube.lookAt(0, 0, 0); 
     }
+
+    // NEW: Save the base rotation AND the image URL into the cube's user data
+    cube.userData.baseRotationY = cube.rotation.y;
+    cube.userData.url = url; 
 
     scene.add(cube);
     images.push(cube);
     return cube;
 }
+
+// --- OVERLAY LOGIC ---
+const overlay = document.getElementById('image-overlay');
+const overlayImg = document.getElementById('overlay-img');
+const closeBtn = document.getElementById('close-btn');
+
+function openImageOverlay(url) {
+    overlayImg.src = url;
+    overlay.classList.add('active');
+}
+
+function closeImageOverlay() {
+    overlay.classList.remove('active');
+    // Clear the image source after the fade-out finishes so it doesn't flash the old image next time
+    setTimeout(() => { overlayImg.src = ''; }, 300);
+}
+
+closeBtn.addEventListener('click', closeImageOverlay);
+
+// Optional: Close overlay if user clicks on the dark background area
+overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+        closeImageOverlay();
+    }
+});
+
+// --- INSTRUCTIONS LOGIC ---
+const instructionsModal = document.getElementById('instructions-modal');
+const startBtn = document.getElementById('start-btn');
+
+startBtn.addEventListener('click', () => {
+    // Fade out
+    instructionsModal.style.opacity = '0';
+    // Remove from the DOM completely after the transition finishes (0.5s)
+    setTimeout(() => {
+        instructionsModal.style.display = 'none';
+    }, 500);
+});

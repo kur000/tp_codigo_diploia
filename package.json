@@ -19,10 +19,8 @@
   },
   "homepage": "https://github.com/kur000/codigo_diploia#readme",
   "dependencies": {
-    "cloudinary": "^2.7.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
-    "mongoose": "^8.19.1",
     "multer": "^2.0.2"
   },
   "devDependencies": {

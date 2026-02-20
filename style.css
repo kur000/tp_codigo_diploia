@@ -1,3 +1,10 @@
+@font-face {
+    font-family: 'Monument Grotesk';
+    src: url('fonts/ABCMonumentGrotesk-Thin-Trial.otf') format('opentype'); /* UPDATE THIS FILENAME */
+    font-weight: normal;
+    font-style: normal;
+}
+
 html, body {
     margin: 0;
     padding: 0;
@@ -5,6 +12,7 @@ html, body {
     height: 100%;
     overflow: hidden;
     background-color: #000;
+    font-family: 'Monument Grotesk', sans-serif; /* NEW */
 }
 
 #three-canvas {
@@ -24,8 +32,9 @@ canvas {
     text-align: center;
     z-index: 100;
     display: block;
-    color: aliceblue;
-    font-family: 'Roboto Mono', monospace;
+    color: rgb(255, 255, 255);
+    font-family: 'Monument Grotesk', sans-serif;
+    font-size: 2.5rem;
 }
 
 .ellipse-guide {
@@ -40,4 +49,113 @@ canvas {
     transform: translate(-50%, -50%);
     pointer-events: none;
     z-index: 10;
+}
+
+/* --- OVERLAY STYLES --- */
+#image-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.92); /* Semi-transparent dark background */
+    z-index: 1000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    
+    /* Animation defaults */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease-in-out;
+}
+
+/* Added via JS when an image is clicked */
+#image-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+#overlay-img {
+    max-width: 90vw;
+    max-height: 90vh;
+    box-shadow: 0 0 30px rgba(0,0,0,0.8);
+    
+    /* Slight zoom-in animation effect */
+    transform: scale(0.95);
+    transition: transform 0.3s ease-in-out;
+}
+
+#image-overlay.active #overlay-img {
+    transform: scale(1);
+}
+
+#close-btn {
+    position: absolute;
+    top: 20px;
+    right: 40px;
+    color: white;
+    font-size: 80px;
+    cursor: pointer;
+    font-family: sans-serif;
+    transition: color 0.2s;
+    user-select: none;
+    font-family: 'Monument Grotesk', sans-serif;
+}
+
+#close-btn:hover {
+    color: #ff5555;
+}
+
+/* --- INSTRUCTIONS MODAL --- */
+#instructions-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.9);
+    z-index: 2000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.modal-content {
+    background-color: #0f0f0f;
+    padding: 40px;
+    border: 1px solid #333;
+    text-align: center;
+    color: #cccccc;
+    max-width: 450px;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 1);
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    color: white;
+}
+
+.modal-content p {
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 20px 0;
+}
+
+#start-btn {
+    margin-top: 15px;
+    padding: 12px 30px;
+    font-size: 16px;
+    cursor: pointer;
+    background-color: transparent;
+    color: white;
+    border: 1px solid white;
+    font-family: 'Monument Grotesk', sans-serif;
+    transition: all 0.2s;
+}
+
+#start-btn:hover {
+    background-color: white;
+    color: black;
 }
